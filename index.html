@@ -1,0 +1,844 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fraction Explorer</title>
+<style>
+  /* ============ THEME TOKENS ============ */
+  :root{
+    --fs: 18px;                 /* base body size, changed by font buttons (floor 18) */
+    --bg:        #eef6f8;       /* soft blue-mint page */
+    --bg-2:      #e3f0ec;       /* soft green wash */
+    --panel:     #ffffff;       /* card surface */
+    --ink:       #143540;       /* deep teal-navy text (12.5:1 on panel) */
+    --ink-soft:  #3c5a63;       /* secondary text */
+    --blue:      #3e7cb1;       /* soft blue */
+    --blue-deep: #2f6390;       /* blue for text/borders */
+    --green:     #4f9d69;       /* soft green */
+    --green-deep:#2f7a49;       /* green for text */
+    --accent:    #e2683c;       /* warm coral (fills, highlights) */
+    --accent-deep:#b8451c;      /* warm coral for text on light (4.9:1) */
+    --empty:     #dce8ec;       /* unfilled fraction part */
+    --line:      #c4d7dd;       /* gentle borders */
+    --shadow:    0 6px 18px rgba(20,53,64,.10);
+    --radius:    18px;
+    --tap:       50px;          /* minimum tap target */
+    --font-display:'Trebuchet MS','Segoe UI',system-ui,sans-serif;
+    --font-body:'Verdana','Segoe UI',system-ui,sans-serif;
+    --t: .35s cubic-bezier(.4,0,.2,1);
+  }
+
+  /* ============ HIGH CONTRAST MODE ============ */
+  body.hc{
+    --bg:#ffffff; --bg-2:#ffffff; --panel:#ffffff;
+    --ink:#000000; --ink-soft:#000000;
+    --blue:#0d4a82; --blue-deep:#0d4a82;
+    --green:#13652f; --green-deep:#13652f;
+    --accent:#9a2f0c; --accent-deep:#9a2f0c;
+    --empty:#ffffff; --line:#000000;
+    --shadow:0 0 0 rgba(0,0,0,0);
+  }
+  body.hc *{ outline-offset:2px; }
+  body.hc .card,
+  body.hc .pill,
+  body.hc button,
+  body.hc .tab,
+  body.hc .cell,
+  body.hc svg .slice{ border-color:#000 !important; }
+  body.hc .empty-fill{ fill:#ffffff; stroke:#000; }
+  body.hc .cell{ border:2px solid #000; }
+
+  /* ============ BASE ============ */
+  *{ box-sizing:border-box; }
+  html{ font-size:var(--fs); }
+  body{
+    margin:0;
+    font-family:var(--font-body);
+    color:var(--ink);
+    background:
+      radial-gradient(1100px 600px at 12% -8%, var(--bg-2), transparent 60%),
+      radial-gradient(900px 500px at 110% 0%, #e7f1f6, transparent 55%),
+      var(--bg);
+    line-height:1.55;
+    min-height:100vh;
+  }
+  h1,h2,h3{ font-family:var(--font-display); line-height:1.2; }
+
+  /* gentle floating background shapes */
+  .bg-deco{ position:fixed; inset:0; overflow:hidden; pointer-events:none; z-index:0; }
+  .bg-deco span{ position:absolute; border-radius:50%; opacity:.07; }
+  .bg-deco span:nth-child(1){ width:240px;height:240px;background:var(--blue); top:18%; left:-60px; }
+  .bg-deco span:nth-child(2){ width:180px;height:180px;background:var(--green); bottom:8%; right:-40px; }
+  .bg-deco span:nth-child(3){ width:120px;height:120px;background:var(--accent); top:60%; left:8%; }
+  body.hc .bg-deco{ display:none; }
+
+  .wrap{ position:relative; z-index:1; max-width:980px; margin:0 auto; padding:0 16px 64px; }
+
+  /* ============ ACCESSIBILITY TOOLBAR ============ */
+  .a11y{
+    position:sticky; top:0; z-index:50;
+    background:var(--panel);
+    border-bottom:2px solid var(--line);
+    box-shadow:var(--shadow);
+  }
+  .a11y-inner{
+    max-width:980px; margin:0 auto; padding:8px 16px;
+    display:flex; flex-wrap:wrap; gap:10px; align-items:center;
+  }
+  .a11y-label{ font-weight:bold; color:var(--ink); margin-right:4px; font-size:.95rem; }
+  .a11y .group{ display:flex; gap:6px; align-items:center; }
+  .a11y .group .glabel{ font-size:.82rem; color:var(--ink-soft); }
+
+  button{
+    font-family:var(--font-body);
+    font-size:1rem;
+    min-height:var(--tap);
+    border-radius:14px;
+    border:2px solid var(--line);
+    background:#f3f8fa;
+    color:var(--ink);
+    padding:6px 16px;
+    cursor:pointer;
+    transition:transform var(--t), background var(--t), border-color var(--t), box-shadow var(--t);
+  }
+  button:hover{ background:#e8f1f4; }
+  button:active{ transform:translateY(1px) scale(.99); }
+  button:focus-visible{ outline:3px solid var(--accent); outline-offset:2px; }
+  .tool-btn{ min-width:var(--tap); font-weight:bold; }
+  .toggle[aria-pressed="true"]{
+    background:var(--green); color:#fff; border-color:var(--green-deep);
+  }
+  body.hc .toggle[aria-pressed="true"]{ background:var(--green); color:#fff; }
+
+  /* ============ HEADER ============ */
+  header.hero{ text-align:center; padding:28px 8px 8px; }
+  header.hero h1{ font-size:2.3rem; margin:.1em 0; color:var(--blue-deep); letter-spacing:.5px; }
+  header.hero .tag{ font-size:1.05rem; color:var(--ink-soft); max-width:640px; margin:0 auto; }
+  .star{ color:var(--accent); }
+
+  /* ============ TABS ============ */
+  .tabs{ display:flex; flex-wrap:wrap; gap:10px; justify-content:center; margin:18px 0 22px; }
+  .tab{
+    font-family:var(--font-display);
+    font-weight:bold; font-size:1.05rem;
+    padding:10px 20px; border-radius:999px;
+    background:var(--panel); border:2px solid var(--line); color:var(--ink-soft);
+  }
+  .tab[aria-selected="true"]{
+    background:var(--blue); color:#fff; border-color:var(--blue-deep);
+    box-shadow:var(--shadow);
+  }
+  body.hc .tab[aria-selected="true"]{ background:var(--blue); color:#fff; }
+
+  .panel{ display:none; animation:fade .4s ease both; }
+  .panel.active{ display:block; }
+  @keyframes fade{ from{opacity:0; transform:translateY(8px);} to{opacity:1; transform:none;} }
+
+  .card{
+    background:var(--panel);
+    border:2px solid var(--line);
+    border-radius:var(--radius);
+    box-shadow:var(--shadow);
+    padding:22px;
+    margin-bottom:20px;
+  }
+  .card h2{ margin:0 0 6px; font-size:1.5rem; color:var(--blue-deep); }
+  .card .lead{ margin:0 0 18px; color:var(--ink-soft); }
+
+  /* ============ SLIDERS ============ */
+  .control{ margin:14px 0; }
+  .control .row{ display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+  .control label{ font-weight:bold; min-width:130px; font-size:1.05rem; }
+  .control .val{
+    display:inline-block; min-width:2.4em; text-align:center;
+    font-family:var(--font-display); font-weight:bold; font-size:1.3rem;
+    color:var(--accent-deep); background:#fbeee8; border-radius:10px; padding:2px 8px;
+  }
+  body.hc .control .val{ background:#fff; border:2px solid #000; color:#000; }
+
+  input[type=range]{
+    -webkit-appearance:none; appearance:none;
+    flex:1; min-width:180px; height:14px; border-radius:999px;
+    background:linear-gradient(90deg,var(--blue),var(--green));
+    outline-offset:4px; cursor:pointer;
+  }
+  input[type=range]:focus-visible{ outline:3px solid var(--accent); }
+  input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none; appearance:none;
+    width:30px; height:30px; border-radius:50%;
+    background:#fff; border:4px solid var(--accent);
+    box-shadow:0 2px 6px rgba(20,53,64,.25); cursor:pointer;
+  }
+  input[type=range]::-moz-range-thumb{
+    width:30px; height:30px; border-radius:50%;
+    background:#fff; border:4px solid var(--accent); cursor:pointer;
+  }
+  body.hc input[type=range]{ background:#000; }
+  body.hc input[type=range]::-webkit-slider-thumb{ border-color:#000; background:#fff; }
+  body.hc input[type=range]::-moz-range-thumb{ border-color:#000; background:#fff; }
+
+  /* ============ FRACTION VISUALS ============ */
+  .visuals{ display:flex; flex-wrap:wrap; gap:26px; align-items:center; justify-content:center; margin:8px 0 4px; }
+  .viz-block{ text-align:center; }
+  .viz-title{ font-weight:bold; color:var(--ink-soft); margin-bottom:8px; font-size:.95rem; }
+
+  .pies{ display:flex; flex-wrap:wrap; gap:10px; justify-content:center; max-width:360px; }
+  .pie{ width:130px; height:130px; }
+  .pie .slice{ stroke:var(--panel); stroke-width:2; transition:opacity var(--t); }
+  .pie .filled{ fill:var(--accent); }
+  .pie .empty-fill{ fill:var(--empty); }
+
+  .bars{ display:flex; flex-direction:column; gap:8px; }
+  .barrow{
+    display:flex; gap:4px; height:46px; width:300px; max-width:78vw;
+    border:2px solid var(--line); border-radius:10px; padding:4px; background:#fafdfe;
+  }
+  .cell{ flex:1; border-radius:6px; background:var(--empty); transition:background var(--t); }
+  .cell.on{ background:var(--green); }
+
+  /* big fraction readout */
+  .readout{
+    text-align:center; margin-top:18px;
+    display:flex; flex-direction:column; align-items:center; gap:6px;
+  }
+  .frac{
+    display:inline-flex; flex-direction:column; align-items:center;
+    font-family:var(--font-display); font-weight:bold; font-size:2.6rem; color:var(--ink); line-height:1;
+  }
+  .frac .num{ padding:0 14px; }
+  .frac .bar{ height:5px; width:100%; min-width:60px; background:var(--ink); border-radius:3px; margin:4px 0; }
+  .frac .den{ padding:0 14px; }
+  .words{ font-size:1.15rem; color:var(--blue-deep); font-weight:bold; }
+  .note{
+    font-size:1rem; color:var(--accent-deep); background:#fbeee8;
+    display:inline-block; padding:6px 14px; border-radius:999px; margin-top:6px;
+  }
+  body.hc .note{ background:#fff; border:2px solid #000; color:#000; }
+
+  /* ============ COMPARE ============ */
+  .compare-grid{ display:grid; grid-template-columns:1fr 1fr; gap:20px; }
+  @media(max-width:640px){ .compare-grid{ grid-template-columns:1fr; } }
+  .mini{ border:2px solid var(--line); border-radius:14px; padding:14px; background:#fafdfe; }
+  .mini h3{ margin:0 0 10px; text-align:center; color:var(--blue-deep); font-size:1.2rem; }
+  .cmp-bar-wrap{ height:40px; border:2px solid var(--line); border-radius:10px; padding:3px; background:#fff; display:flex; gap:3px; }
+  .verdict{
+    text-align:center; font-family:var(--font-display); font-weight:bold;
+    font-size:1.6rem; margin:20px 0 8px; color:var(--green-deep);
+  }
+  .verdict .big{ color:var(--accent-deep); }
+  .why{ text-align:center; color:var(--ink-soft); font-size:1.05rem; max-width:640px; margin:0 auto; }
+
+  /* ============ QUIZ ============ */
+  .progress{ display:flex; gap:6px; justify-content:center; margin-bottom:14px; }
+  .dot{ width:16px; height:16px; border-radius:50%; background:var(--empty); border:2px solid var(--line); }
+  .dot.done{ background:var(--green); border-color:var(--green-deep); }
+  .dot.now{ background:var(--accent); border-color:var(--accent-deep); transform:scale(1.18); }
+  .qvisual{ display:flex; justify-content:center; margin:10px 0 18px; }
+  .options{ display:grid; grid-template-columns:1fr 1fr; gap:12px; max-width:460px; margin:0 auto; }
+  @media(max-width:480px){ .options{ grid-template-columns:1fr; } }
+  .opt{
+    font-family:var(--font-display); font-weight:bold; font-size:1.35rem;
+    padding:16px; background:#f3f8fa; border:2px solid var(--line); border-radius:14px;
+  }
+  .opt:hover{ border-color:var(--blue); }
+  .opt.correct{ background:var(--green); color:#fff; border-color:var(--green-deep); }
+  .opt.wrong{ background:#fbeee8; border-color:var(--accent-deep); color:var(--accent-deep); }
+  body.hc .opt.correct{ background:var(--green); color:#fff; }
+  body.hc .opt.wrong{ background:#fff; border-color:#000; color:#000; }
+  .feedback{
+    margin-top:18px; padding:14px 18px; border-radius:14px; font-size:1.08rem;
+    display:none; animation:fade .35s ease both;
+  }
+  .feedback.show{ display:block; }
+  .feedback.good{ background:#e7f4ec; color:var(--green-deep); border:2px solid var(--green); }
+  .feedback.try{ background:#fbf0ea; color:var(--accent-deep); border:2px solid var(--accent); }
+  body.hc .feedback.good, body.hc .feedback.try{ background:#fff; border:2px solid #000; color:#000; }
+  .quiz-foot{ display:flex; justify-content:space-between; align-items:center; margin-top:18px; gap:10px; flex-wrap:wrap; }
+  .score-final{ text-align:center; }
+  .score-final .big{ font-family:var(--font-display); font-size:2.4rem; color:var(--green-deep); }
+  .primary{ background:var(--accent); color:#fff; border-color:var(--accent-deep); font-weight:bold; }
+  .primary:hover{ background:var(--accent-deep); }
+  body.hc .primary{ background:var(--accent); color:#fff; }
+
+  /* ============ VOCAB ============ */
+  .vocab-list{ display:flex; flex-direction:column; gap:12px; }
+  .vocab{
+    border:2px solid var(--line); border-radius:14px; background:#fafdfe; overflow:hidden;
+  }
+  .vocab-head{
+    width:100%; text-align:left; border:none; border-radius:0; background:transparent;
+    display:flex; justify-content:space-between; align-items:center; gap:12px;
+    font-family:var(--font-display); font-weight:bold; font-size:1.25rem; color:var(--blue-deep);
+  }
+  .vocab-head .chev{ transition:transform var(--t); color:var(--accent-deep); font-size:1.4rem; }
+  .vocab[open] .chev, .vocab.open .chev{ transform:rotate(180deg); }
+  .vocab-body{
+    max-height:0; overflow:hidden; transition:max-height var(--t);
+    padding:0 18px;
+  }
+  .vocab.open .vocab-body{ max-height:320px; padding-bottom:16px; }
+  .vocab-body p{ margin:6px 0; font-size:1.05rem; }
+  .vocab-body .ex{ background:#fff; border-left:5px solid var(--green); padding:8px 12px; border-radius:8px; color:var(--ink); }
+  body.hc .vocab-body .ex{ border-left-color:#000; border:2px solid #000; }
+
+  .visually-hidden{ position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); }
+
+  /* reduced motion */
+  @media (prefers-reduced-motion: reduce){
+    *{ transition:none !important; animation:none !important; }
+  }
+</style>
+</head>
+<body>
+<div class="bg-deco" aria-hidden="true"><span></span><span></span><span></span></div>
+
+<!-- ===== ACCESSIBILITY TOOLBAR ===== -->
+<div class="a11y" role="region" aria-label="Accessibility tools">
+  <div class="a11y-inner">
+    <span class="a11y-label">🛠️ Tools:</span>
+    <div class="group">
+      <button id="readBtn" class="toggle tool-btn" aria-pressed="false"
+        title="Turn read-aloud on or off, then tap any text to hear it">🔊 Read aloud: Off</button>
+    </div>
+    <div class="group">
+      <span class="glabel">Text size</span>
+      <button id="fontDown" class="tool-btn" aria-label="Make text smaller">A−</button>
+      <button id="fontUp" class="tool-btn" aria-label="Make text bigger">A+</button>
+    </div>
+    <div class="group">
+      <button id="contrastBtn" class="toggle tool-btn" aria-pressed="false"
+        title="High contrast colours">◐ High contrast: Off</button>
+    </div>
+  </div>
+</div>
+
+<div class="wrap">
+  <header class="hero">
+    <h1>Fraction Explorer <span class="star">★</span></h1>
+    <p class="tag">Build fractions, compare them, and practise — one piece at a time.
+       Every mistake is just a step toward getting it. You've got this!</p>
+  </header>
+
+  <!-- ===== TABS ===== -->
+  <div class="tabs" role="tablist" aria-label="Choose an activity">
+    <button class="tab" role="tab" aria-selected="true"  aria-controls="p-build"   id="t-build">🧱 Build</button>
+    <button class="tab" role="tab" aria-selected="false" aria-controls="p-compare" id="t-compare">⚖️ Compare</button>
+    <button class="tab" role="tab" aria-selected="false" aria-controls="p-quiz"    id="t-quiz">✏️ Practice</button>
+    <button class="tab" role="tab" aria-selected="false" aria-controls="p-words"   id="t-words">📖 Words</button>
+  </div>
+
+  <!-- ===== BUILD ===== -->
+  <section class="panel active" id="p-build" role="tabpanel" aria-labelledby="t-build">
+    <div class="card">
+      <h2>Fraction Builder</h2>
+      <p class="lead">Slide to choose your <strong>top number</strong> (numerator) and
+        <strong>bottom number</strong> (denominator). Watch the shapes change!</p>
+
+      <div class="control">
+        <div class="row">
+          <label for="numSlider">Top number<br><span style="font-weight:normal;color:var(--ink-soft);font-size:.9rem">(numerator — shaded parts)</span></label>
+          <input type="range" id="numSlider" min="0" max="12" value="3" aria-describedby="numVal">
+          <span class="val" id="numVal">3</span>
+        </div>
+      </div>
+      <div class="control">
+        <div class="row">
+          <label for="denSlider">Bottom number<br><span style="font-weight:normal;color:var(--ink-soft);font-size:.9rem">(denominator — equal parts)</span></label>
+          <input type="range" id="denSlider" min="1" max="12" value="4" aria-describedby="denVal">
+          <span class="val" id="denVal">4</span>
+        </div>
+      </div>
+
+      <div class="visuals">
+        <div class="viz-block">
+          <div class="viz-title">As a pie</div>
+          <div class="pies" id="buildPies"></div>
+        </div>
+        <div class="viz-block">
+          <div class="viz-title">As a bar</div>
+          <div class="bars" id="buildBars"></div>
+        </div>
+      </div>
+
+      <div class="readout" id="buildReadout" data-speak=""></div>
+    </div>
+  </section>
+
+  <!-- ===== COMPARE ===== -->
+  <section class="panel" id="p-compare" role="tabpanel" aria-labelledby="t-compare">
+    <div class="card">
+      <h2>Compare Two Fractions</h2>
+      <p class="lead">Set two fractions and we'll show you which one is bigger —
+        and <em>why</em>, using same-size bars.</p>
+
+      <div class="compare-grid">
+        <div class="mini">
+          <h3 style="color:var(--accent-deep)">Fraction A</h3>
+          <div class="control"><div class="row">
+            <label for="aNum" style="min-width:90px">Top</label>
+            <input type="range" id="aNum" min="0" max="6" value="3"><span class="val" id="aNumV">3</span>
+          </div></div>
+          <div class="control"><div class="row">
+            <label for="aDen" style="min-width:90px">Bottom</label>
+            <input type="range" id="aDen" min="1" max="12" value="4"><span class="val" id="aDenV">4</span>
+          </div></div>
+          <div class="cmp-bar-wrap" id="aBar"></div>
+        </div>
+
+        <div class="mini">
+          <h3 style="color:var(--blue-deep)">Fraction B</h3>
+          <div class="control"><div class="row">
+            <label for="bNum" style="min-width:90px">Top</label>
+            <input type="range" id="bNum" min="0" max="6" value="2"><span class="val" id="bNumV">2</span>
+          </div></div>
+          <div class="control"><div class="row">
+            <label for="bDen" style="min-width:90px">Bottom</label>
+            <input type="range" id="bDen" min="1" max="12" value="3"><span class="val" id="bDenV">3</span>
+          </div></div>
+          <div class="cmp-bar-wrap" id="bBar"></div>
+        </div>
+      </div>
+
+      <div class="verdict" id="verdict" data-speak=""></div>
+      <p class="why" id="whyText" data-speak=""></p>
+    </div>
+  </section>
+
+  <!-- ===== QUIZ ===== -->
+  <section class="panel" id="p-quiz" role="tabpanel" aria-labelledby="t-quiz">
+    <div class="card" id="quizCard">
+      <h2>Practice Quiz</h2>
+      <p class="lead">Look at the picture. Which written fraction matches it? 5 questions — take your time.</p>
+      <div class="progress" id="progress" aria-hidden="true"></div>
+      <div id="quizBody"></div>
+    </div>
+  </section>
+
+  <!-- ===== WORDS ===== -->
+  <section class="panel" id="p-words" role="tabpanel" aria-labelledby="t-words">
+    <div class="card">
+      <h2>Fraction Words</h2>
+      <p class="lead">Tap a word to learn what it means.</p>
+      <div class="vocab-list" id="vocabList"></div>
+    </div>
+  </section>
+</div>
+
+<script>
+"use strict";
+
+/* =========================================================
+   NUMBER WORDS  (for spoken + written names)
+   ========================================================= */
+const ONES = ["zero","one","two","three","four","five","six","seven","eight","nine","ten","eleven","twelve"];
+const DEN_WORDS = {1:"whole",2:"half",3:"third",4:"fourth",5:"fifth",6:"sixth",7:"seventh",8:"eighth",9:"ninth",10:"tenth",11:"eleventh",12:"twelfth"};
+function denName(num, den){
+  let base = DEN_WORDS[den] || (den + "th");
+  if (den === 2) base = (num === 1) ? "half" : "halves";
+  else if (num !== 1) base += "s";
+  return base;
+}
+function fractionInWords(num, den){
+  if (num === 0) return "zero";
+  if (den === 1) return ONES[num] + (num === 1 ? " whole" : " wholes");
+  return (ONES[num] || num) + " " + denName(num, den);
+}
+
+/* =========================================================
+   SHARED VISUAL BUILDERS
+   ========================================================= */
+function piePath(cx, cy, r, a0, a1){
+  const rad = a => (a - 90) * Math.PI / 180;
+  const x0 = cx + r * Math.cos(rad(a0)), y0 = cy + r * Math.sin(rad(a0));
+  const x1 = cx + r * Math.cos(rad(a1)), y1 = cy + r * Math.sin(rad(a1));
+  const large = (a1 - a0) > 180 ? 1 : 0;
+  return `M ${cx} ${cy} L ${x0} ${y0} A ${r} ${r} 0 ${large} 1 ${x1} ${y1} Z`;
+}
+/* Returns SVG markup for ONE whole pie split into `den`, with `filled` slices shaded. */
+function onePie(den, filled){
+  const cx=65, cy=65, r=58;
+  let svg = `<svg class="pie" viewBox="0 0 130 130" role="img" aria-hidden="true">`;
+  if (den === 1){
+    svg += `<circle cx="${cx}" cy="${cy}" r="${r}" class="slice ${filled>=1?'filled':'empty-fill'}"/>`;
+  } else {
+    const step = 360 / den;
+    for (let i=0;i<den;i++){
+      const cls = i < filled ? 'filled' : 'empty-fill';
+      svg += `<path class="slice ${cls}" d="${piePath(cx,cy,r,i*step,(i+1)*step)}"/>`;
+    }
+  }
+  svg += `</svg>`;
+  return svg;
+}
+/* Multi-whole pie display for improper fractions. */
+function renderPies(num, den){
+  const wholes = Math.max(1, Math.ceil(num/den));
+  let out = "";
+  for (let w=0; w<wholes; w++){
+    const filled = Math.max(0, Math.min(den, num - w*den));
+    out += onePie(den, filled);
+  }
+  return out;
+}
+/* Bar rows: one row per whole, `den` cells each, first `num` total cells shaded. */
+function renderBars(num, den){
+  const wholes = Math.max(1, Math.ceil(num/den));
+  let out = "";
+  for (let w=0; w<wholes; w++){
+    out += `<div class="barrow">`;
+    for (let c=0;c<den;c++){
+      const idx = w*den + c;
+      out += `<div class="cell ${idx < num ? 'on':''}"></div>`;
+    }
+    out += `</div>`;
+  }
+  return out;
+}
+
+/* =========================================================
+   READ-ALOUD (browser speech synthesis)
+   ========================================================= */
+let readAloud = false;
+const synth = window.speechSynthesis || null;
+function speak(text){
+  if (!readAloud || !synth || !text) return;
+  synth.cancel();
+  const u = new SpeechSynthesisUtterance(text);
+  u.rate = 0.95; u.pitch = 1.05;
+  synth.speak(u);
+}
+const readBtn = document.getElementById('readBtn');
+readBtn.addEventListener('click', ()=>{
+  readAloud = !readAloud;
+  readBtn.setAttribute('aria-pressed', String(readAloud));
+  readBtn.textContent = readAloud ? '🔊 Read aloud: On' : '🔊 Read aloud: Off';
+  if (readAloud) speak('Read aloud is on. Tap any text to hear it.');
+  else if (synth) synth.cancel();
+});
+/* When ON, tapping any element marked [data-speak] (or with text) reads it. */
+document.addEventListener('click', (e)=>{
+  if (!readAloud) return;
+  const el = e.target.closest('[data-speak]');
+  if (el){
+    const txt = el.getAttribute('data-speak') || el.textContent;
+    speak(txt.trim());
+  }
+});
+
+/* =========================================================
+   FONT SIZE  (floor at 18px per spec)
+   ========================================================= */
+let fontPx = 18;
+const root = document.documentElement;
+function applyFont(){ root.style.setProperty('--fs', fontPx + 'px'); }
+document.getElementById('fontUp').addEventListener('click', ()=>{ fontPx = Math.min(30, fontPx+2); applyFont(); });
+document.getElementById('fontDown').addEventListener('click', ()=>{ fontPx = Math.max(18, fontPx-2); applyFont(); });
+
+/* =========================================================
+   HIGH CONTRAST
+   ========================================================= */
+const contrastBtn = document.getElementById('contrastBtn');
+contrastBtn.addEventListener('click', ()=>{
+  const on = document.body.classList.toggle('hc');
+  contrastBtn.setAttribute('aria-pressed', String(on));
+  contrastBtn.textContent = on ? '◐ High contrast: On' : '◐ High contrast: Off';
+});
+
+/* =========================================================
+   TABS
+   ========================================================= */
+const tabs = Array.from(document.querySelectorAll('.tab'));
+const panels = {
+  't-build':'p-build','t-compare':'p-compare','t-quiz':'p-quiz','t-words':'p-words'
+};
+tabs.forEach(tab=>{
+  tab.addEventListener('click', ()=>{
+    tabs.forEach(t=> t.setAttribute('aria-selected','false'));
+    tab.setAttribute('aria-selected','true');
+    Object.values(panels).forEach(id=> document.getElementById(id).classList.remove('active'));
+    document.getElementById(panels[tab.id]).classList.add('active');
+    if (synth) synth.cancel();
+  });
+  // keyboard arrow navigation between tabs
+  tab.addEventListener('keydown', (e)=>{
+    if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
+    const i = tabs.indexOf(tab);
+    const next = e.key === 'ArrowRight' ? (i+1)%tabs.length : (i-1+tabs.length)%tabs.length;
+    tabs[next].focus(); tabs[next].click();
+  });
+});
+
+/* =========================================================
+   BUILDER
+   ========================================================= */
+const numSlider = document.getElementById('numSlider');
+const denSlider = document.getElementById('denSlider');
+const numVal = document.getElementById('numVal');
+const denVal = document.getElementById('denVal');
+const buildPies = document.getElementById('buildPies');
+const buildBars = document.getElementById('buildBars');
+const buildReadout = document.getElementById('buildReadout');
+
+function gcd(a,b){ return b ? gcd(b, a%b) : a; }
+
+function renderBuilder(){
+  const num = +numSlider.value, den = +denSlider.value;
+  numVal.textContent = num; denVal.textContent = den;
+  buildPies.innerHTML = renderPies(num, den);
+  buildBars.innerHTML = renderBars(num, den);
+
+  // big readout
+  let html = `<div class="frac" aria-hidden="true">
+      <span class="num">${num}</span><span class="bar"></span><span class="den">${den}</span></div>
+      <div class="words">${capitalize(fractionInWords(num,den))}</div>`;
+
+  let speakTxt = `${fractionInWords(num,den)}. ${num} out of ${den} equal parts.`;
+
+  // depth: simplest form + mixed number
+  const extras = [];
+  if (num > 0 && den > 1){
+    const g = gcd(num, den);
+    if (g > 1 && num % den !== 0){
+      extras.push(`Simplest form: ${num/g}/${den/g}`);
+    }
+  }
+  if (num > den){
+    const whole = Math.floor(num/den);
+    const rem = num % den;
+    const mixed = rem === 0 ? `${whole}` : `${whole} and ${rem}/${den}`;
+    extras.push(`That's more than one whole! Same as ${mixed}.`);
+    speakTxt += ` That is more than one whole.`;
+  } else if (num === den && den !== 1){
+    extras.push(`All parts shaded — that's one whole!`);
+  }
+  if (extras.length){
+    html += `<div class="note">${extras.join('  •  ')}</div>`;
+  }
+  buildReadout.innerHTML = html;
+  buildReadout.setAttribute('data-speak', speakTxt);
+  return speakTxt;
+}
+function capitalize(s){ return s.charAt(0).toUpperCase() + s.slice(1); }
+
+numSlider.addEventListener('input', renderBuilder);
+denSlider.addEventListener('input', renderBuilder);
+// speak only when the slider is released, so it isn't chatty
+function speakBuild(){ speak(renderBuilder()); }
+numSlider.addEventListener('change', speakBuild);
+denSlider.addEventListener('change', speakBuild);
+renderBuilder();
+
+/* =========================================================
+   COMPARE
+   ========================================================= */
+const cmp = {
+  aNum:document.getElementById('aNum'), aDen:document.getElementById('aDen'),
+  bNum:document.getElementById('bNum'), bDen:document.getElementById('bDen'),
+  aNumV:document.getElementById('aNumV'), aDenV:document.getElementById('aDenV'),
+  bNumV:document.getElementById('bNumV'), bDenV:document.getElementById('bDenV'),
+  aBar:document.getElementById('aBar'), bBar:document.getElementById('bBar'),
+  verdict:document.getElementById('verdict'), why:document.getElementById('whyText')
+};
+function clampCompare(){
+  // keep numerators no greater than denominators (proper fractions) for clean comparison
+  cmp.aNum.max = cmp.aDen.value;
+  cmp.bNum.max = cmp.bDen.value;
+  if (+cmp.aNum.value > +cmp.aDen.value) cmp.aNum.value = cmp.aDen.value;
+  if (+cmp.bNum.value > +cmp.bDen.value) cmp.bNum.value = cmp.bDen.value;
+}
+function segBar(num, den){
+  // a single whole bar (always full width) divided into den, num shaded
+  let h = "";
+  for (let i=0;i<den;i++){
+    h += `<div class="cell ${i<num?'on':''}"></div>`;
+  }
+  return h;
+}
+function renderCompare(){
+  clampCompare();
+  const an=+cmp.aNum.value, ad=+cmp.aDen.value, bn=+cmp.bNum.value, bd=+cmp.bDen.value;
+  cmp.aNumV.textContent=an; cmp.aDenV.textContent=ad;
+  cmp.bNumV.textContent=bn; cmp.bDenV.textContent=bd;
+  cmp.aBar.innerHTML = segBar(an, ad);
+  cmp.bBar.innerHTML = segBar(bn, bd);
+  cmp.aBar.querySelectorAll('.cell.on').forEach(c=> c.style.background='var(--accent)');
+  cmp.bBar.querySelectorAll('.cell.on').forEach(c=> c.style.background='var(--blue)');
+
+  // compare by cross multiplication
+  const left = an*bd, right = bn*ad;
+  const aName = `${an}/${ad}`, bName = `${bn}/${bd}`;
+  let verdict, why;
+  if (left === right){
+    verdict = `<span class="big">${aName}</span> = <span class="big">${bName}</span>`;
+    why = `These are equivalent fractions — they cover the same amount of one whole, even though the pieces are different sizes.`;
+  } else if (left > right){
+    verdict = `<span class="big">${aName}</span> is greater than <span class="big">${bName}</span>`;
+    why = `Look at the bars: ${aName} fills more of the same whole than ${bName} does, so ${aName} is the bigger fraction.`;
+  } else {
+    verdict = `<span class="big">${bName}</span> is greater than <span class="big">${aName}</span>`;
+    why = `Look at the bars: ${bName} fills more of the same whole than ${aName} does, so ${bName} is the bigger fraction.`;
+  }
+  cmp.verdict.innerHTML = verdict;
+  cmp.why.textContent = why;
+
+  const spokenSign = left===right ? 'equals' : (left>right ? `${aName} is greater than ${bName}` : `${bName} is greater than ${aName}`);
+  const verdictSpeak = left===right ? `${aName} equals ${bName}` : spokenSign;
+  cmp.verdict.setAttribute('data-speak', verdictSpeak);
+  cmp.why.setAttribute('data-speak', why);
+  return verdictSpeak + '. ' + why;
+}
+['aNum','aDen','bNum','bDen'].forEach(k=>{
+  cmp[k].addEventListener('input', renderCompare);
+  cmp[k].addEventListener('change', ()=> speak(renderCompare()));
+});
+renderCompare();
+
+/* =========================================================
+   QUIZ
+   ========================================================= */
+const QUESTIONS = [
+  { shape:'bar', num:3, den:4, options:['3/4','4/3','1/4','3/8'], answer:'3/4',
+    why:'The bar is split into 4 equal parts and 3 are shaded — so 3 out of 4 is 3/4.' },
+  { shape:'pie', num:2, den:3, options:['2/3','1/3','3/2','2/6'], answer:'2/3',
+    why:'The circle has 3 equal slices and 2 are filled — that is 2/3.' },
+  { shape:'bar', num:5, den:8, options:['5/8','3/8','8/5','5/16'], answer:'5/8',
+    why:'8 equal parts in all, 5 of them shaded, makes 5/8.' },
+  { shape:'pie', num:1, den:2, options:['1/2','1/3','2/2','1/4'], answer:'1/2',
+    why:'The circle is cut into 2 equal halves and 1 is filled — that is one half, 1/2.' },
+  { shape:'bar', num:4, den:6, options:['4/6','6/4','2/6','4/12'], answer:'4/6',
+    why:'6 equal parts, 4 shaded, gives 4/6. (Fun fact: 4/6 is equivalent to 2/3!)' }
+];
+const encourage = ['Nice work!','You got it!','Great thinking!','Yes — well spotted!','Excellent!'];
+const kind = ['Good try — let\'s look again.','Almost! Here\'s the idea.','Not quite, and that\'s okay.','Keep going — mistakes help us learn.'];
+
+let qIndex = 0, score = 0, answered = false;
+const quizBody = document.getElementById('quizBody');
+const progress = document.getElementById('progress');
+
+function renderProgress(){
+  progress.innerHTML = QUESTIONS.map((_,i)=>{
+    let c = 'dot';
+    if (i < qIndex) c += ' done';
+    else if (i === qIndex) c += ' now';
+    return `<span class="${c}"></span>`;
+  }).join('');
+}
+function questionVisual(q){
+  if (q.shape === 'pie') return `<div class="pies" style="max-width:160px">${onePie(q.den, q.num)}</div>`;
+  return `<div class="bars">${renderBars(q.num, q.den)}</div>`;
+}
+function shuffle(arr){ return arr.map(v=>[Math.random(),v]).sort((a,b)=>a[0]-b[0]).map(p=>p[1]); }
+
+function renderQuestion(){
+  answered = false;
+  renderProgress();
+  const q = QUESTIONS[qIndex];
+  const opts = shuffle(q.options.slice());
+  quizBody.innerHTML = `
+    <p style="text-align:center;font-weight:bold;font-size:1.15rem" data-speak="Question ${qIndex+1}. Which fraction matches the picture?">
+       Question ${qIndex+1} of ${QUESTIONS.length}: which fraction matches the picture?</p>
+    <div class="qvisual">${questionVisual(q)}</div>
+    <div class="options" id="optWrap">
+      ${opts.map(o=>`<button class="opt" data-val="${o}">${o}</button>`).join('')}
+    </div>
+    <div class="feedback" id="fb" data-speak=""></div>
+    <div class="quiz-foot">
+      <span style="color:var(--ink-soft)">Score: <strong>${score}</strong> / ${QUESTIONS.length}</span>
+      <button class="primary" id="nextBtn" style="display:none">Next ➜</button>
+    </div>`;
+  if (readAloud) speak(`Question ${qIndex+1}. Which fraction matches the picture?`);
+
+  const fb = document.getElementById('fb');
+  const nextBtn = document.getElementById('nextBtn');
+  quizBody.querySelectorAll('.opt').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      if (answered) return;
+      answered = true;
+      const chosen = btn.getAttribute('data-val');
+      const correct = chosen === q.answer;
+      // mark all buttons
+      quizBody.querySelectorAll('.opt').forEach(b=>{
+        if (b.getAttribute('data-val') === q.answer) b.classList.add('correct');
+      });
+      if (!correct) btn.classList.add('wrong');
+      if (correct) score++;
+      const head = correct ? encourage[qIndex % encourage.length] : kind[qIndex % kind.length];
+      const msg = correct
+        ? `${head} ${q.why}`
+        : `${head} The answer is ${q.answer}. ${q.why}`;
+      fb.textContent = msg;
+      fb.setAttribute('data-speak', msg);
+      fb.className = 'feedback show ' + (correct ? 'good' : 'try');
+      nextBtn.style.display = 'inline-block';
+      nextBtn.focus();
+      if (readAloud) speak(msg);
+    });
+  });
+  nextBtn.addEventListener('click', ()=>{
+    qIndex++;
+    if (qIndex < QUESTIONS.length) renderQuestion();
+    else renderResults();
+  });
+}
+function renderResults(){
+  renderProgress();
+  let line;
+  if (score === QUESTIONS.length) line = "Perfect score — you're a fraction star! ★";
+  else if (score >= 3) line = "Great job! You really understand this.";
+  else line = "Nice effort! Every round makes you stronger. Try again?";
+  quizBody.innerHTML = `
+    <div class="score-final">
+      <p style="font-size:1.2rem">You scored</p>
+      <p class="big">${score} / ${QUESTIONS.length}</p>
+      <p style="font-size:1.15rem;color:var(--ink-soft)" data-speak="${line}">${line}</p>
+      <button class="primary" id="again" style="margin-top:12px">↻ Try again</button>
+    </div>`;
+  if (readAloud) speak(`You scored ${score} out of ${QUESTIONS.length}. ${line}`);
+  document.getElementById('again').addEventListener('click', ()=>{
+    qIndex = 0; score = 0; renderQuestion();
+  });
+}
+renderQuestion();
+
+/* =========================================================
+   VOCABULARY
+   ========================================================= */
+const VOCAB = [
+  { term:'Numerator',
+    def:'The top number in a fraction. It tells you how many equal parts you have or have shaded in.',
+    ex:'In 3/4, the numerator is 3 — so 3 parts are shaded.' },
+  { term:'Denominator',
+    def:'The bottom number in a fraction. It tells you how many equal parts the whole is split into.',
+    ex:'In 3/4, the denominator is 4 — the whole is cut into 4 equal parts.' },
+  { term:'Equivalent fractions',
+    def:'Two fractions that look different but are worth exactly the same amount of a whole.',
+    ex:'1/2 and 2/4 are equivalent — both fill up half of the shape.' }
+];
+const vocabList = document.getElementById('vocabList');
+vocabList.innerHTML = VOCAB.map((v,i)=>`
+  <div class="vocab" id="v${i}">
+    <button class="vocab-head" aria-expanded="false" aria-controls="vb${i}" data-i="${i}">
+      <span>${v.term}</span><span class="chev" aria-hidden="true">▾</span>
+    </button>
+    <div class="vocab-body" id="vb${i}">
+      <p data-speak="${v.term}. ${v.def}">${v.def}</p>
+      <p class="ex" data-speak="Example. ${v.ex}"><strong>Example:</strong> ${v.ex}</p>
+    </div>
+  </div>`).join('');
+
+vocabList.querySelectorAll('.vocab-head').forEach(head=>{
+  head.addEventListener('click', ()=>{
+    const i = head.getAttribute('data-i');
+    const box = document.getElementById('v'+i);
+    const open = box.classList.toggle('open');
+    head.setAttribute('aria-expanded', String(open));
+    if (open && readAloud){
+      const v = VOCAB[i];
+      speak(`${v.term}. ${v.def} Example. ${v.ex}`);
+    }
+  });
+});
+</script>
+</body>
+</html>
